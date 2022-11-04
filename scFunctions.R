@@ -102,3 +102,21 @@ waterfall_plot <- function (fsgea_results, graph_title) {
     theme(axis.text.y = element_text(size = 7), 
           plot.title = element_text(hjust = 1))
 }
+
+
+
+
+# Violinplot p-value
+vp_case1 <- function(gene_signature, file_name, test_sign, y_max){
+  plot_case1 <- function(signature){
+    VlnPlot(pbmc, features = signature,
+            pt.size = 0.1, 
+            group.by = "Response", 
+            y.max = y_max, # add the y-axis maximum value - otherwise p-value hidden
+    ) + stat_compare_means(comparisons = test_sign, label = "p.signif")
+  }
+  purrr::map(gene_signature, plot_case1) %>% cowplot::plot_grid(plotlist = .)
+  file_name <- paste0(file_name, "_r.png")
+  ggsave(file_name, width = 14, height = 8)
+}
+

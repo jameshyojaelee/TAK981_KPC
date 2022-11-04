@@ -18,10 +18,10 @@ library(infercnv)
 library(viridis)
 library(slingshot)
 library(reticulate)
-source("scFunctions.R")
 library("scProportionTest")
-setwd("E:/TAK981_KPC/control_vs_TAK981")
-load("immune.RData")
+setwd("X:/control_vs_TAK981")
+source("scFunctions.R")
+load("new_immune.RData")
 use_python("C:/ProgramData/Miniconda3/python.exe")
 py_config()
 
@@ -30,14 +30,14 @@ sceM <- BaronPancreasData('mouse')
 sceM <- sceM[,!is.na(sceM$label)]
 library(scuttle)
 sceM <- logNormCounts(sceM)
-memory.limit(56000)
+memory.limit(130000)
 immune <- DietSeurat(immune, assay="RNA")
 immune.list <- SplitObject(immune, split.by = "orig.ident")
 
 for (i in 1:length(immune.list)) {
-  immune.list[[i]] <- SCTransform(immune.list[[i]], vars.to.regress=c("nCount_RNA","percent.mito", "percent.ribo"))
+  immune.list[[i]] <- SCTransform(immune.list[[i]], vars.to.regress=c("percent.mito", "percent.ribo"))
 }
-features <- SelectIntegrationFeatures(object.list = immune.list, nfeatures = 3000)
+features <- SelectIntegrationFeatures(object.list = immune.list, nfeatures = 2000)
 immune.list <- PrepSCTIntegration(object.list = immune.list, anchor.features = features)
 anchors <- FindIntegrationAnchors(object.list = immune.list, normalization.method = "SCT",
                                   anchor.features = features)
@@ -48,7 +48,7 @@ immune <- RunPCA(immune, verbose = FALSE)
 immune <- RunTSNE(immune, dims = 1:40, verbose = FALSE)
 immune <- RunUMAP(immune, dims = 1:40,verbose = FALSE)
 immune <- FindNeighbors(immune, dims = 1:40, verbose = FALSE)
-immune <- FindClusters(immune, resolution = 2)
+immune <- FindClusters(immune, resolution = 0.8)
 DimPlot(immune, reduction="umap",label=TRUE,pt.size=1)
 
 # lognormalize for marker genes
@@ -60,8 +60,8 @@ immune.markers <- FindAllMarkers(immune, assay="RNA",only.pos = TRUE, min.pct = 
 immune.markers %>%
   group_by(cluster) %>%
   slice_max(n = 10, order_by = avg_log2FC) -> immune.top10
-write.csv(immune.markers, "immune_markers.csv", row.names = T)
-jpeg("immuune_cluster_heatmap.jpeg", width=3000, height=2000)
+write.csv(immune.markers, "immune_markers2.csv", row.names = T)
+jpeg("immuune_cluster_heatmap2.jpeg", width=3000, height=2000)
 DoHeatmap(immune, features = immune.top10$gene) + NoLegend()
 dev.off()
 
@@ -72,10 +72,15 @@ dev.off()
 VlnPlot(immune, features = c("Cd19"), group.by = "SingleR.label")
 VlnPlot(immune, features = c("Ccr2"))
 
-DimPlot(immune, reduction="umap",label=TRUE,pt.size=1, group.by = "SingleR.label", repel=T)
+VlnPlot(immune, features=c("Cd74"),group.by = "SingleR.label", split.by = "treatment")
+FeaturePlot(immune, features=c("Cd40"))
+
+
+
+DimPlot(immune, reduction="tsne",label=TRUE,pt.size=1, group.by = "SingleR.label", repel=T)
 #cluster 13 is not immune cell. some fibroblasts and fibrocytes express cd45. 
 temp <- immune
-
+# immune <- temp
 SRimmune <- as.SingleCellExperiment(temp)
 SRimmune <- SingleR(test=SRimmune, ref=mref, assay.type.test = 1, labels = mref$label.main)
 temp[["SingleR.label"]] <- SRimmune$labels
@@ -83,60 +88,64 @@ rm(SRimmune)
 DimPlot(temp, reduction="tsne", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE)
 subset(temp, subset=(seurat_clusters==22))
 
-VlnPlot(immune, features = c("Adgre1"))
+DimPlot(immune, reduction="umap",label=TRUE,pt.size=1, repel=T)
+VlnPlot(immune, features = c("Spp1"))
+
+dot_features <- c("Cd40", "Cd47", "Cd80", "Cd86", "Stat1")
+VlnPlot(immune, features = c("Spp1"), group.by = "SingleR.label", split.by = "treatment", pt.size=0.01)
+dittoDotPlot(immune, vars = dot_features, group.by= "treatment", split.by = "SingleR.label", split.nrow = 8,
+             size=10, max.color="red", min.color = "yellow") +
+  theme(axis.title.y=element_blank(), axis.text.x = element_text(angle=30))
+
 temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==7, "B cells")
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==22, "Basophils") #
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==12, "T/NK cells")
 temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==14, "T/NK cells")
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==15, "T/NK cells")
-
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==11, "Granulocytes") #Il1b+ Arg2+  https://www.science.org/doi/10.1126/sciimmunol.aay6017?url_ver=Z39.88-2003&rfr_id=ori:rid:crossref.org&rfr_dat=cr_pub%20%200pubmed
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==21, "PMN-MDSC") # https://rupress.org/jem/article/218/4/e20201803/211778/Analysis-of-classical-neutrophils-and
-
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==17, "doublet")
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==8, "Granulocytes") #Il1b+ Arg2+  https://www.science.org/doi/10.1126/sciimmunol.aay6017?url_ver=Z39.88-2003&rfr_id=ori:rid:crossref.org&rfr_dat=cr_pub%20%200pubmed
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==20, "PMN-MDSC") # https://rupress.org/jem/article/218/4/e20201803/211778/Analysis-of-classical-neutrophils-and
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==15, "doublet")
 
 # https://www.cell.com/pb-assets/products/nucleus/nucleus-phagocytes/rnd-systems-dendritic-cells-br.pdf
 # https://www.science.org/doi/10.1126/scitranslmed.abf5058
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==9, "cDC2-Itgax") #expressing Itgax and Mgl2, Ear2, 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==18, "cDC1-Ccl22") #Relb+ Itgae(Cd103)- CD8a-  Xcr1- Cd209a- Clec9a- Ly75(Cd205)+ 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==19, "cDC1-Clec9a") #Itgae(Cd103)+ CD8a-  Xcr1+  Clec9a+ Batf3+
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==20, "pDC") #Cd11b- Siglech+ Bst2+ Tlr7+ Clec9a+ Ly6c2+ 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==11, "cDC2-Itgax") #expressing Itgax and Mgl2, Ear2, 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==16, "cDC1-Ccl22") #Relb+ Itgae(Cd103)- CD8a-  Xcr1- Cd209a- Clec9a- Ly75(Cd205)+ 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==17, "cDC1-Clec9a") #Itgae(Cd103)+ CD8a-  Xcr1+  Clec9a+ Batf3+
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==19, "pDC") #Cd11b- Siglech+ Bst2+ Tlr7+ Clec9a+ Ly6c2+ 
 
 # M1 high tumor also proliferative
 # https://www.nature.com/articles/s41598-020-73624-w
 # https://www.nature.com/articles/s41467-017-01711-0
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==0, "Macro-C1q") #MHC Class II high macropahge (cd74 is invariant MHCii) https://www.frontiersin.org/articles/10.3389/fimmu.2018.01132/full
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==0, "Macro-MHCII") #MHC Class II high macropahge (cd74 is invariant MHCii) https://www.frontiersin.org/articles/10.3389/fimmu.2018.01132/full
 temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==2, "Macro-C1q")
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==13, "Macro-C1q")
 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==3, "Macro-C1q") #MHC Class II high macropahge (cd74 is invariant MHCii) https://www.frontiersin.org/articles/10.3389/fimmu.2018.01132/full
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==5, "Macro-C1q") #MHC Class II high macropahge (cd74 is invariant MHCii) https://www.frontiersin.org/articles/10.3389/fimmu.2018.01132/full
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==8, "Macro-C1q")
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==10, "Macro-C1q")
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==1, "Macro-MHCII") 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==3, "Macro-MHCII")
 
 temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==4, "Mono/MDSC") #high Il1b, Ly6c2, Ccr2. pro-tumorogensis genes such as Lyz2, Ifitm3, Vim, S100a6, https://www.jimmunol.org/content/206/1_Supplement/101.01
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==12, "Macro-Isg15") #Ly6C+CCR2+ indicates BMDM. highly expressed genes are related to IFN response (IFIT, ISG, OAS). 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==9, "Mono-Ly6c") #Ly6C+CCR2+ indicates BMDM. highly expressed genes are related to IFN response (IFIT, ISG, OAS). 
 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==8, "Macro-Proliferating") #Ki67 high
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==6, "Macro-Proliferating") #Ki67 high
 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==1, "Macro-Spp1") #high in Arg1. may be MDSC. determine after InferCNV
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==6, "Macro-Spp1") 
-temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==16, "Macro-Spp1") 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==5, "Macro-Spp1") #high in Arg1. may be MDSC. determine after InferCNV
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==10, "Macro-Spp1") 
+temp[["SingleR.label"]] <- replace(temp[["SingleR.label"]], temp[["seurat_clusters"]]==13, "Macro-Spp1") 
 
 #remove doublet cluster
-temp <- subset(temp, subset=(SingleR.label=="Macro-Spp1" |SingleR.label=="Mono-Ccr2" | SingleR.label=="Macro-C1q" | 
-                                 SingleR.label=="Macro-Isg15" |SingleR.label=="Macro-Proliferating" | SingleR.label=="pDC" | 
+immune <- subset(temp, subset=(SingleR.label=="Macro-Spp1" |SingleR.label=="Mono/MDSC" | SingleR.label=="Macro-MHCII" | SingleR.label=="Macro-C1q"  |
+                                 SingleR.label=="Mono-Ly6c" |SingleR.label=="Macro-Proliferating" | SingleR.label=="pDC" | 
                                  SingleR.label=="cDC1-Clec9a" | SingleR.label=="cDC1-Ccl22" |SingleR.label== "cDC2-Itgax"|
                                  SingleR.label=="T/NK cells" | SingleR.label=="PMN-MDSC" | SingleR.label=="Granulocytes" |
-                                 SingleR.label=="B cells" | SingleR.label=="Basophils"))
-DimPlot(temp, reduction="tsne", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE) + theme(legend.position = "none")
-immune <- temp
-rm(temp)
+                                 SingleR.label=="B cells"))
+DimPlot(immune, reduction="umap", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE) + theme(legend.position = "none")
+# 
+# Idents(immune) <- "SingleR.label"
+# levels(immune) <- c("Macro-Spp1", "Mono/MDSC", "Macro-C1q", "Macro-Isg15", "Macro-Proliferating", "pDC", "cDC1-Clec9a",
+#                     "cDC1-Ccl22", "cDC2-Itgax", "T/NK cells", "PMN-MDSC", "Granulocytes","B cells", "Basophils")
 
-tiff("immune_tsne_SingleR.jpeg", unit="in", width=6, height=6, res=500)
-DimPlot(immune, reduction="tsne", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE) + theme(legend.position = "none")
+tiff("immune_umap_SingleR.jpeg", unit="in", width=8, height=6, res=500)
+DimPlot(immune, reduction="umap", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE) + theme(legend.position = "none")
 dev.off()
-tiff("immune_tsne_SingleR_treatment.jpeg", unit="in", width=18, height=6, res=500)
-DimPlot(immune, reduction="tsne", label=TRUE,pt.size=1, group.by = "SingleR.label", split.by = "treatment", repel = TRUE) + theme(legend.position = "none")
+tiff("immune_umap_SingleR_treatment.jpeg", unit="in", width=18, height=6, res=500)
+DimPlot(immune, reduction="umap", label=TRUE,pt.size=1, group.by = "SingleR.label", split.by = "treatment", repel = TRUE) + theme(legend.position = "none")
 dev.off()
 
 tiff("immune_celltype_proportion_treatment.jpeg", unit="in", width=9, height=6, res=500)
@@ -187,8 +196,8 @@ Mki67 <- VlnPlot(immune, features = c("Mki67"), group.by = "SingleR.label") +
         plot.title = element_blank(),
         panel.border = element_rect(colour = "black", fill=NA, size=1))
 
-C1qa <- VlnPlot(immune, features = c("C1qa"), group.by = "SingleR.label") +
-  ylab("C1qa") +
+H2Ab1 <- VlnPlot(immune, features = c("H2-Ab1"), group.by = "SingleR.label") +
+  ylab("H2-Ab1") +
   scale_y_continuous(position="left")+
   theme(axis.title.x =element_blank(),
         axis.text.x = element_blank(),
@@ -228,16 +237,6 @@ Ccl22 <- VlnPlot(immune, features = c("Ccl22"), group.by = "SingleR.label") +
         panel.border = element_rect(colour = "black", fill=NA, size=1))
 Chil3 <- VlnPlot(immune, features = c("Chil3"), group.by = "SingleR.label") +
   ylab("Chil3") +
-  scale_y_continuous(position="left")+
-  theme(axis.title.x =element_blank(),
-        axis.text.x = element_blank(),
-        axis.title.y.left = element_text(size= 25, margin=margin(r = 30)),
-        legend.position = 'none',
-        plot.title = element_blank(),
-        panel.border = element_rect(colour = "black", fill=NA, size=1))
-
-Fcer1a<- VlnPlot(immune, features = c("Fcer1a"), group.by = "SingleR.label") +
-  ylab("Fcer1a") +
   scale_y_continuous(position="left")+
   theme(axis.title.x =element_blank(),
         axis.text.x = element_blank(),
@@ -301,20 +300,51 @@ Cd3e <- VlnPlot(immune, features = c("Cd3e"), group.by = "SingleR.label") +
         plot.title = element_blank(),
         panel.border = element_rect(colour = "black", fill=NA, size=1))
 
+VlnPlot(immune, features = c("Cd40"), group.by = "SingleR.label", split.by = "treatment") +
+  ylab("Cd40") +
+  scale_y_continuous(position="left")+
+  theme(axis.title.x =element_blank(),
+        axis.text.x = element_text(size = 25),
+        axis.title.y.left = element_text(size= 25, margin=margin(r = 30)),
+        legend.position = 'none',
+        plot.title = element_blank(),
+        panel.border = element_rect(colour = "black", fill=NA, size=1))
+
 tiff("immune_vlnplot.jpeg", unit="in", width=24, height=20, res=500)
-Cd79a/Fcer1a/Ccl22/Clec9a/Itgax/G0s2/C1qa/Isg15/Mki67/Spp1/Ccr2/Siglech/Ngp/Cd3e
+Cd79a/Ccl22/Clec9a/Itgax/G0s2/C1qa/H2Ab1/Mki67/Spp1/Ly6c2/Ccr2/Siglech/Ngp/Cd3e
 dev.off()
 
-dot_features <- c("Cd79a","Fcer1a","Ccl22","Clec9a","Itgax","G0s2","C1qa","Isg15","Mki67","Spp1","Ccr2","Siglech","Ngp","Cd3e")
+
+dot_features <- c("Cd79a","Ccl22","Clec9a","Itgax","G0s2","C1qc","","Mki67","Spp1","Ly6c2","Isg15","Ccr2","Chil3","Siglech","Ngp","Cd3e", "Cd27")
+
 tiff("immune_marker_dotplot.jpeg", unit="in", width=10, height=8, res=500)
 DotPlot(immune, features = dot_features, group.by="SingleR.label") +
   scale_colour_gradient2(low = "#FBF2AE", mid = "#FFB809", high = "#D10F0F") + 
-  scale_size(range = c(1,10)) + RotatedAxis() + theme(axis.title = element_blank())+
+  scale_size(range = c(0,10)) + RotatedAxis() + theme(axis.title = element_blank())+
   geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
   guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))
 dev.off()
 
-VlnPlot(immune, features = c("Siglech"), group.by = "SingleR.label")
+VlnPlot(immune, features = c("Ccl5"), group.by = "SingleR.label", split.by = "treatment")
+temp <- immune
+Idents(temp) <- "seurat_clusters"
+Idents(temp) <- "SingleR.label"
+
+tiff("immune_CD40.jpeg", unit="in", width=8, height=6, res=500)
+FeaturePlot(immune, feature=c("Cd40"),pt.size=0.7)
+dev.off()
+
+dot_features <- c("Ccr2","Chil3","Vcan","Spp1","Arg1","Vegfa", "Mki67","Top2a","Ube2c","Ly6c2","Isg15", "Plac8" ,"C1qb","Mafb", "Maf") 
+dittoDotPlot(immune, vars = dot_features, group.by = "SingleR.label",size=10, max.color="red", min.color = "yellow") +
+  theme(axis.title.y=element_blank(),
+        axis.text.x = element_text(angle=30)) 
+
+DotPlot(TNK, features = c("Tnfaip3"), group.by = "treatment") + scale_size(range = c(1,10))
+
+gene_sig <- c("Batf3")
+comparisons <- list(c("control", "TAK981"))
+vp_case1(gene_signature = gene_sig, file_name = "test", test_sign = comparisons, y_max = 7)
+
 
 #Proportion comparison - montecarlo
 library("scProportionTest")
@@ -325,113 +355,11 @@ prop_test <- permutation_test(
   sample_1 = "control", sample_2 = "TAK981",
   sample_identity = "treatment"
 )
-permutation_plot(prop_test)+ scale_colour_discrete(labels = function(x) str_wrap(x, width = 7)) 
+permutation_plot(prop_test)+ scale_colour_discrete(labels = function(x) str_wrap(x, width = 7))
 
 tiff("immune_celltype_proportion_test.jpeg", unit="in", width=7, height=3, res=500)
 permutation_plot(prop_test)+ scale_colour_discrete(labels = function(x) str_wrap(x, width = 7))
 dev.off()
-
-########################################################################################
-
-#macrophage
-Macrophages <- subset(immune, subset=(SingleR.label=="Macro-Spp1" |
-                                        SingleR.label=="Macro-Isg15" |SingleR.label=="Macro-Proliferating" |
-                                        SingleR.label=="Macro-C1q"))
-save(Macrophages, file="Macrophages.RData")
-rm(Macrophages)
-Spp1 <- subset(immune, subset=(SingleR.label=="Macro-Spp1"))
-C1q <- subset(immune, subset=(SingleR.label=="Macro-C1q"))
-
-
-#cIAP12 paper and drug response Cell paper
-VlnPlot(Macrophages, features = c("Spp1"), group.by = "SingleR.label")
-VlnPlot(Macrophages, features = c("H2-Aa"))
-VlnPlot(Macrophages, features = c("H2-Eb1"))
-VlnPlot(Macrophages, features = c("Cd74"))
-VlnPlot(Macrophages, features = c("Il1b"))
-VlnPlot(Macrophages, features = c("C1qc"))
-VlnPlot(Macrophages, features = c("Maf"))
-VlnPlot(Macrophages, features = c("Mafb"))
-
-dot_features <- c("Nfkb1", "Nfkb2",
-                  "Chuk","Ikbkb", "Ikbkg", "Rel")
-dot_features <- c("Atf1", "Atf2","Atf3","Atf4","Atf5","Atf6", "Atf7", "Batf", "Batf2", "Batf3", "Jdp2",
-                  "Jun", "Junb", "Jund",
-                  "Fos", "Fosb", "Fosl1", "Fosl2",
-                  "Maf", "Mafa", "Mafb", "Maff", "Mafg", "Mafk")
-DotPlot(Macrophages, features = dot_features, group.by="treatment") + scale_size(range = c(1,15)) + RotatedAxis() +
-  geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-  guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))
-
-dot_features <- c("Ccr2","Chil3","Vcan","Spp1","Arg1","Vegfa", "Mki67","Top2a","Ube2c","Ly6c2","Isg15", "Plac8" ,"C1qb","Mafb", "Maf") 
-dittoDotPlot(Macrophages, vars = dot_features, group.by = "SingleR.label",size=10, max.color="red", min.color = "yellow") +
-  theme(axis.title.y=element_blank(),
-        axis.text.x = element_text(angle=30)) 
-# dittoDotPlot(Macrophages, vars = dot_features, group.by = "SingleR.label", size=10, max.color="red", min.color = "yellow") + coord_flip() +
-#   theme(axis.title.x=element_blank(),
-# axis.text.x = element_text(angle=30))
-
-
-dittoHeatmap(Macrophages, dot_features,
-             annot.by = c("SingleR.label", "treatment"))
-tiff("macrophage_dittodotplot.jpeg", unit="in", width=10, height= 5, res=500)
-dittoDotPlot(Macrophages, vars = dot_features, group.by = "SingleR.label",size=12, max.color="red", min.color = "yellow") +
-  theme(axis.title.y=element_blank(),
-        axis.text.y = element_text(face="bold"))
-dev.off()
-tiff("macrophage_dittodotplot_flipped.jpeg", unit="in", width=6, height= 5.5, res=500)
-dittoDotPlot(Macrophages, vars = dot_features, group.by = "SingleR.label", size=8, max.color="red", min.color = "yellow") + coord_flip() +
-  theme(axis.title.x=element_blank(),
-        axis.text.x = element_text(size=10,angle=30,face="bold"))
-dev.off()
-tiff("immune_dittoHeatmap.jpeg", unit="in", width=7, height=5, res=500)
-dittoHeatmap(Macrophages, dot_features,
-             annot.by = c("SingleR.label", "treatment"))
-dev.off()
-
-dot_features <- c("Cd80", "Cd86", "Sod2", "Nos2", "Stat1","Il1b","Irf3","Irf5","Ifng","Tlr4","Il18", "Ccl2","Ccl3", "Ccl4", "Cxcl9", "Cxcl10", "Cxcl16",
-                  "Mrc1", "Chil3", "Retnla", "Arg1", "Stat3",
-                  "Il10ra", "Tnfsf14", "Il6", "Sphk1",  "Irf4", "Socs3",
-                  "Cd163", "Tgfb1","Mertk", "Tlr8",
-                  "Vegfa")
-
-DotPlot(Macrophages, features = dot_features, group.by="treatment") +
-  scale_colour_gradient2(low = "#FBF2AE", mid = "#FFB809", high = "#D10F0F") + 
-  scale_size(range = c(1,10)) + RotatedAxis() + theme(axis.title = element_blank())+
-  geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-  guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))
-
-tiff("M1 M2 Macrophages.jpeg", unit="in", width=12, height=3.5, res=500)
-DotPlot(Macrophages, features = dot_features, group.by="treatment") +
-  scale_colour_gradient2(low = "#FBF2AE", mid = "#FFB809", high = "#D10F0F") + 
-  scale_size(range = c(1,10)) + RotatedAxis() + theme(axis.title = element_blank())+
-  geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-  guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))
-dev.off()
-
-# DotPlot(Macrophages, features = dot_features, group.by="treatment") + scale_size(range = c(1,10)) + 
-#   geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-#   scale_colour_viridis(option="magma") +
-#   guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))+
-#   RotatedAxis() +
-#   theme(axis.title = element_blank())
-
-#Macro-Vegfa
-VlnPlot(Macrophages, features = c("Vegfa"))
-VlnPlot(Macrophages, features = c("Arg1"))
-VlnPlot(Macrophages, features = c("Spp1"))
-VlnPlot(Macrophages, features = c("Cxcl3")) # pro-angiogenic chemokines https://www.frontiersin.org/articles/10.3389/fphys.2013.00159/full
-
-#Macro-Phagocytic
-VlnPlot(Macrophages, features = c("Ly6c2"))
-
-#Macro-ISG
-VlnPlot(Macrophages, features = c("Isg15"))
-VlnPlot(Macrophages, features = c("Stat1"))
-VlnPlot(Macrophages, features = c("Cd86"))
-
-# mref <- ImmGenData() #mouse immune cells
-
 
 ########################################################################################
 #Slingshot map psuedotime
@@ -473,11 +401,9 @@ lines(scimmune, lwd = 2, type = 'lineages', col = 'black')
 # Trajectory analysis
 # https://github.com/cole-trapnell-lab/monocle-release/issues/388
 # https://github.com/satijalab/seurat/issues/1658
-myeloid <- subset(immune, subset=(SingleR.label=="Macro-Spp1" |SingleR.label=="Macro-Ly6c+Chil3+" |
-                                    SingleR.label=="Macro-Ly6c+Isg15+" |SingleR.label=="Macro-Proliferating" | SingleR.label=="Macro-C1q" |
-                                    SingleR.label=="cDC1-Clec9a" | SingleR.label== "cDC1-Ccl22" | SingleR.label=="cDC2-Cd209a" | 
-                                    SingleR.label== "cDC2-Itgax"))
-DimPlot(myeloid, reduction="umap", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE)
+Macrophages <- subset(immune, subset=(SingleR.label=="Macro-Spp1" |SingleR.label=="Mono/MDSC" |
+                                    SingleR.label=="Macro-Ly6c" |SingleR.label=="Macro-Proliferating" | SingleR.label=="Macro-C1q"))
+DimPlot(Macrophages, reduction="umap", label=TRUE,pt.size=1, group.by = "SingleR.label", repel = TRUE)
 myeloid <- ProjectDim(myeloid, reduction = "pca")
 myeloid_matrix <- myeloid@assays$RNA@counts
 myeloid_metadata <- myeloid@meta.data
@@ -870,6 +796,89 @@ dev.off()
 
 
 ############################################################################################################
+############################################################################################################
+#Boxplot module
+DefaultAssay(Macrophages) <- "RNA"
+FeatureScatter(Macrophages, "SUMO2", "CD163", slot="counts")
+
+sumo_features <- list(c('Sumo1','Sumo2','Sumo3','Ube2i', 'Uba2'))
+Macrophages <- AddModuleScore(
+  Macrophages,
+  features = sumo_features,
+  name='SUMO_score'
+)
+
+M1_features <- list(c("Cd80", 'Cd86','Stat1', 'Ccl2', 'Ccl3', 'Ccl4','Cxcl10', "Nos2"))
+M2_features <- list(c("Mrc1", "Chil3", "Arg1","Cd163", "Stat3","Stat6", "Msr1", "Tgfb1", "Vegfa"))
+
+Macrophages <- AddModuleScore(
+  Macrophages,
+  features = M1_features,
+  name='M1_score'
+)
+
+Macrophages <- AddModuleScore(
+  Macrophages,
+  features = M2_features,
+  name='M2_score'
+)
+
+
+FeatureScatter(Macrophages, 'SUMO_score1', 'M2_score1', group.by = "treatment")
+
+Split_FeatureScatter(seurat_object = Macrophages, feature1 = "SUMO1", feature2 = "M21",
+                     split.by = "treatment", group.by = "SingleR.label", num_columns = 2,
+                     pt.size = 1)
+
+SUMOvsM1 <- FetchData(Macrophages, c('M1_score1', "SUMO_score1", "treatment") , slot = "data")
+SUMOvsM2 <- FetchData(Macrophages, c('M2_score1', "SUMO_score1", "treatment") , slot = "data")
+
+VlnPlot(Macrophages, features = c('SUMO_score1', 'M2_score1'), group.by = "treatment")
+
+my_comparisons <- list(c("control", "TAK981"))
+ggboxplot(SUMOvsM1, x = "treatment", y = "SUMO_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+ggboxplot(SUMOvsM1, x = "treatment", y = "M1_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+
+tiff("SUMO_Macrophages.jpeg", unit="in", width=4, height=6, res=500)
+ggboxplot(SUMOvsM2, x = "treatment", y = "SUMO_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+dev.off()
+
+tiff("M1_Macrophages.jpeg", unit="in", width=4, height=6, res=500)
+ggboxplot(SUMOvsM1, x = "treatment", y = "M1_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+dev.off()
+tiff("M2_Macrophages.jpeg", unit="in", width=4, height=6, res=500)
+ggboxplot(SUMOvsM2, x = "treatment", y = "M2_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+dev.off()
+
+#3D featurescatter
+data <- FetchData(Macrophages, vars = c('MRC1', 'CD86', 'UBE2I'))
+ggplot(data = data) +
+  geom_point(mapping = aes(x = MRC1, y = CD86, color = UBE2I), position = 'jitter') +
+  scale_color_gradientn(colors = c('lightgrey', 'blue')) +
+  cowplot::theme_cowplot()
+
+#########################
+
+MDSC_score <- list(c("Il1b", "Vegfa", "Stat3"))
+
+Macrophages <- AddModuleScore(
+  Macrophages,
+  features = M1_features,
+  name='MDSC_score'
+)
+
+FeatureScatter(Macrophages, 'SUMO_score1', 'MDSC_score1', group.by = "treatment")
+SUMOvsMDSC <- FetchData(Macrophages, c('MDSC_score1', "SUMO_score1", "treatment") , slot = "data")
+
+tiff("MDSC_score.jpeg", unit="in", width=4, height=6, res=500)
+ggboxplot(SUMOvsMDSC, x = "treatment", y = "MDSC_score1", color='treatment', palette = "jco") + stat_compare_means(comparisons = my_comparisons)
+dev.off()
+
+
+
+
+
+############################################################################################################
 load("DC.RData")
 DC <- subset(Myeloid, subset=SingleR.label=="DC")
 
@@ -878,144 +887,253 @@ dot_features <- c("Itgam","Itgax","H2-Ab1","Cd40", "Tlr7", "Tlr9")
 DotPlot(DC, features = dot_features, group.by="orig.ident") + scale_size(range = c(1,15)) + RotatedAxis() + 
   scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
 
+TAN <- subset(immune, subset=SingleR.label=="Granulocytes")
 
-############################################################################################################
-#TNK analysis
-TNK <- subset(immune, subset=(SingleR.label=="T/NK cells"))
-load("TNK.RData")
 
-mref <- ImmGenData()
-setwd("E:/TAK981_KPC/control_vs_TAK981")
-hallmark_pathway <- gmtPathways("h.all.v7.4.symbols.gmt.txt")
 
-TNK <- DietSeurat(TNK, assay="RNA")
-TNK.list <- SplitObject(TNK, split.by = "orig.ident")
 
-for (i in 1:length(TNK.list)) {
-  TNK.list[[i]] <- SCTransform(TNK.list[[i]], vars.to.regress=c("nCount_RNA","percent.mito", "percent.ribo"))
-}
-features <- SelectIntegrationFeatures(object.list = TNK.list, nfeatures = 3000)
-TNK.list <- PrepSCTIntegration(object.list = TNK.list, anchor.features = features)
-anchors <- FindIntegrationAnchors(object.list = TNK.list, normalization.method = "SCT",
-                                  anchor.features = features)
-TNK <- IntegrateData(anchorset = anchors, normalization.method = "SCT")
-DefaultAssay(TNK) <- "integrated"
-TNK <- ScaleData(object = TNK, features=features)
-TNK <- RunPCA(TNK, verbose = FALSE)
-TNK <- RunTSNE(TNK, dims = 1:40, verbose = FALSE)
-TNK <- RunUMAP(TNK, dims = 1:40,verbose = FALSE)
-TNK <- FindNeighbors(TNK, dims = 1:40, verbose = FALSE)
-TNK <- FindClusters(TNK, resolution = 1)
-DimPlot(TNK, reduction="umap",label=TRUE,pt.size=2, split.by = "treatment")
-
-# lognormalize for marker genes
-DefaultAssay(TNK) <- "RNA"
-TNK <- NormalizeData(TNK) #LogNormalize
-all.genes <- rownames(TNK)
-TNK <- ScaleData(object = TNK, features = all.genes)
-TNK.markers <- FindAllMarkers(TNK, assay="RNA",only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-TNK.markers %>%
-  group_by(cluster) %>%
-  slice_max(n = 10, order_by = avg_log2FC) -> TNK.top10
-write.csv(TNK.markers, "TNK_markers.csv", row.names = T)
-jpeg("TNK_cluster_heatmap.jpeg", width=500, height=500)
-DoHeatmap(TNK, features = TNK.top10$gene) + NoLegend()
-dev.off()
-
-FeaturePlot(TNK,reduction = "umap", features = "Cd8b1")
-
-SRTNK <- as.SingleCellExperiment(TNK)
-SRTNK <- SingleR(test=SRTNK, ref=mref, assay.type.test = 1, labels = mref$label.main)
-TNK[["SingleR.label"]] <- SRTNK$labels
-rm(SRTNK)
-
-# TNK[["SingleR.label"]] <- replace(TNK[["SingleR.label"]], TNK[["SingleR.label"]]=="Tgd", "T cells")
-# TNK[["SingleR.label"]] <- replace(TNK[["SingleR.label"]], TNK[["SingleR.label"]]=="ILC", "NK cells")
-#TNK <- subset(TNK, subset=(SingleR.label=="T cells" |SingleR.label == "NK cells"))
-DimPlot(TNK, reduction="umap", label=TRUE,pt.size=3, group.by = "SingleR.label")
-
-####################################################################################################################
-#CD8 T cell analysis
-cd8t <- subset(TNK, subset= Cd8a > 0 | Cd8b1 > 0)
-NK <- subset(TNK, subset=Cd3e <= 0)
-DimPlot(TNK, reduction="tsne", label=TRUE,pt.size=3, group.by = "SingleR.label", split.by = "orig.ident")
-
-#Il2ra(Cd25), Tnfrsf4(Ox40), Tnfrsf9(41bb)
-dot_features <- c("Cd28", "Ifng","Il2ra","Cd69","Cd44","Tnfrsf4", "Tnfrsf9", "Gzmb", "Ctla4","Pdcd1", "Havcr2", "Lag3")
-tiff("TNK actexh individual.jpeg", unit="in", width=7, height=3.5, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") +
-  scale_colour_gradient2(low = "#FBF2AE", mid = "#FFB809", high = "#D10F0F") + 
-  scale_size(range = c(1,10)) + RotatedAxis() + theme(axis.title = element_blank())+
-  geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-  guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white")))
-dev.off()
-
-dot_features <- c("Atf1", "Atf2","Atf3","Atf4","Atf5","Atf6", "Atf7", "Batf", "Batf2", "Batf3", "Jdp2",
-                  "Jun", "Junb", "Jund",
-                  "Fos", "Fosb", "Fosl1", "Fosl2",
-                  "Maf", "Mafa", "Mafb", "Maff", "Mafg", "Mafk")
-tiff("cd8t Ap-1.jpeg", unit="in", width=15, height=4, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") + scale_size(range = c(1,15)) + 
-  RotatedAxis() + scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
-dev.off()
-
-#NFAT pathway (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3694398/)
-#Ppp3cc (Calcineurin)
-#NFAT1 = NFATc2
-#NFAT2= NFATc1
-#NFAT4= NFATc3
-#NFAT5
-
-dot_features <- c("Cracr2a","Nfatc1", "Nfatc2", "Ppp3ca","Ppp3cc")
-tiff("Cd8 NFAT.jpeg", unit="in", width=8, height=5, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") + scale_size(range = c(1,20)) + 
-  RotatedAxis() + scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
-dev.off()
-
-#NF-kb pathway
-#IKK-alpha = CHUK
-#IKK-beta = Ikbkb
-#NEMO = Ikbkg
-
-dot_features <- c("Nfkb1", "Nfkb2",
-                  "Chuk","Ikbkb", "Ikbkg", "Rel")
-
-tiff("Cd8 NFKB.jpeg", unit="in", width=8, height=5, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") + scale_size(range = c(1,20)) + 
-  RotatedAxis() + scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
-dev.off()
-
-# Trac - TCR receptor alpha constant "Trac","Trbc1","Trbc2",
-# Cd28 PI3k signaling
-# Pik4ca - PI3k
-# PRkcq PKC-theta
-dot_features <- c("Cd28","Icos","Pik3ca", "Prkcq", "Mapk1",
-                  "Plcg1","Grb2", "Vav1", "Card9")
-
-tiff("PI3K CD28 signaling NfKB.jpeg", unit="in", width=8, height=5, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") + scale_size(range = c(1,20)) + 
-  RotatedAxis() + scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
-dev.off()
-
-#NKT-like CD8t cells
-#Cd49b = Itga2
-#NKG2D = Klrk1
-#CD94 = Klrd1
-#NK1.1 = Klrb1
-#iNKT1 genes - T-bet(Tbx21), Ifng, 
-#iNKT2 genes: Il4, PLZF(Zbtb16)
-#iNKT17 genes: Il17, ROR??t(Rorc),
-#CD69 for activated NK cells
-dot_features <- c("Ncam1", "Itga2","Klrk1","Klrd1", "Klrb1", "Klrb1a","Klrb1b", "Klrb1c", "Klrb1d",
-                  "Trbc1", "Trac",
-                  "Tbx21", "Ifng",
-                  "Il4", "Zbtb16",
-                  "Il17a","Rorc",
-                  "Cd69", "Gzmb")
-
-#tiff("PI3K CD28 signaling NfKB.jpeg", unit="in", width=8, height=5, res=300)
-DotPlot(cd8t, features = dot_features, group.by="treatment") + scale_size(range = c(1,20)) + 
-  RotatedAxis() + scale_colour_gradient2(low = "#FBF2AE", mid = "#FC8A09", high = "#D10F0F")
-#dev.off()
- 
 #################################################################################################################
+treatment_split <- SplitObject(immune, split.by = "treatment")
+control <- treatment_split$control
+TAK981 <- treatment_split$TAK981
+
+# control
+control_cellchat <- GetAssayData(control, assay = "RNA", slot = "data") # normalized data matrix
+Idents(control) <- "SingleR.label"
+labels <- Idents(control)
+meta <- data.frame(group = labels, row.names = names(labels)) # create a dataframe of the cell labels
+control_cellchat <- createCellChat(object = control_cellchat, meta = meta, group.by = "group")
+control_cellchat <- addMeta(control_cellchat, meta = meta, meta.name = "labels")
+control_cellchat <- setIdent(control_cellchat, ident.use = "labels")
+levels(control_cellchat@idents) 
+groupSize <- as.numeric(table(control_cellchat@idents)) 
+control_cellchatDB <- CellChatDB.mouse 
+control_cellchat@DB <- control_cellchatDB
+control_cellchat <- subsetData(control_cellchat)
+control_cellchat <- identifyOverExpressedGenes(control_cellchat)
+control_cellchat <- identifyOverExpressedInteractions(control_cellchat)
+control_cellchat <- projectData(control_cellchat, PPI.mouse)
+control_cellchat <- computeCommunProb(control_cellchat)
+# control_cellchat <- filterCommunication(control_cellchat, min.cells = 40)
+control_cellchat <- computeCommunProbPathway(control_cellchat)
+control_cellchat <- aggregateNet(control_cellchat)
+groupSize <- as.numeric(table(control_cellchat@idents))
+par(mfrow = c(2,2), xpd=TRUE)
+netVisual_circle(control_cellchat@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+netVisual_circle(control_cellchat@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+
+
+TAK981_cellchat <- GetAssayData(TAK981, assay = "RNA", slot = "data") # normalized data matrix
+Idents(TAK981) <- "SingleR.label"
+labels <- Idents(TAK981)
+meta <- data.frame(group = labels, row.names = names(labels)) # create a dataframe of the cell labels
+TAK981_cellchat <- createCellChat(object = TAK981_cellchat, meta = meta, group.by = "group")
+TAK981_cellchat <- addMeta(TAK981_cellchat, meta = meta, meta.name = "labels")
+TAK981_cellchat <- setIdent(TAK981_cellchat, ident.use = "labels")
+levels(TAK981_cellchat@idents) 
+groupSize <- as.numeric(table(TAK981_cellchat@idents)) 
+TAK981_cellchatDB <- CellChatDB.mouse 
+TAK981_cellchat@DB <- TAK981_cellchatDB
+TAK981_cellchat <- subsetData(TAK981_cellchat)
+TAK981_cellchat <- identifyOverExpressedGenes(TAK981_cellchat)
+TAK981_cellchat <- identifyOverExpressedInteractions(TAK981_cellchat)
+TAK981_cellchat <- projectData(TAK981_cellchat, PPI.mouse)
+TAK981_cellchat <- computeCommunProb(TAK981_cellchat)
+# TAK981_cellchat <- filterCommunication(TAK981_cellchat, min.cells = 10)
+TAK981_cellchat <- computeCommunProbPathway(TAK981_cellchat)
+TAK981_cellchat <- aggregateNet(TAK981_cellchat)
+groupSize <- as.numeric(table(TAK981_cellchat@idents))
+par(mfrow = c(2,2), xpd=TRUE)
+netVisual_circle(TAK981_cellchat@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+netVisual_circle(TAK981_cellchat@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+
+
+
+# Comparison Analysis
+group.new = levels(control_cellchat@idents)
+TAK981_cellchat <- liftCellChat(TAK981_cellchat, group.new)
+object.list <- list(control = control_cellchat, TAK981 = TAK981_cellchat)
+for (i in 1:length(object.list)) {
+  object.list[[i]] <- netAnalysis_computeCentrality(object.list[[i]])
+}
+combined_cellchat <- mergeCellChat(object.list, add.names = names(object.list))
+combined_cellchat
+# Compare the total number of interactions and interaction strength
+gg1 <- compareInteractions(combined_cellchat, show.legend = F, group = c(1,2))
+gg2 <- compareInteractions(combined_cellchat, show.legend = F, group = c(1,2), measure = "weight")
+gg1 + gg2
+
+par(mfrow = c(2,2), xpd=TRUE)
+# netVisual_diffInteraction(combined_cellchat, weight.scale = T)
+netVisual_diffInteraction(combined_cellchat, weight.scale = T, measure = "weight")
+
+tiff("immune_interaction_web.jpeg", unit="in", width=6, height=6, res=500)
+netVisual_diffInteraction(combined_cellchat, weight.scale = T, measure = "weight")
+dev.off()
+
+gg1 <- netVisual_heatmap(combined_cellchat)
+#> Do heatmap based on a merged object
+gg2 <- netVisual_heatmap(combined_cellchat, measure = "weight")
+#> Do heatmap based on a merged object
+gg2
+
+# Compare the major sources and targets in 2D space
+num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+gg <- list()
+for (i in 1:length(object.list)) {
+  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax)
+}
+#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+patchwork::wrap_plots(plots = gg)
+
+tiff("immune_interaction_weight_comparison.jpeg", unit="in", width=8, height=4, res=500)
+patchwork::wrap_plots(plots = gg)
+dev.off()
+
+# Hierarchy plot
+pathways.show <- c("PD-L1") 
+weight.max <- getMaxWeight(object.list, slot.name = c("netP"), attribute = pathways.show) # control the edge weights across different datasets
+vertex.receiver = c(5) # Left portion of hierarchy plot the shows signaling to dermal cells and right portion shows signaling to epidermal cells
+par(mfrow = c(2,3), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_aggregate(object.list[[i]], signaling = pathways.show, vertex.receiver = vertex.receiver, 
+                      edge.weight.max = weight.max[1], edge.width.max = 10, 
+                      signaling.name = paste(pathways.show, names(object.list)[i]))
+}
+
+netAnalysis_signalingChanges_scatter(combined_cellchat, idents.use = "T/NK cells")
+gg1 <- netAnalysis_signalingChanges_scatter(combined_cellchat, idents.use = "T/NK cells")
+gg2 <- netAnalysis_signalingChanges_scatter(combined_cellchat, idents.use = "myCAF")
+gg3 <- netAnalysis_signalingChanges_scatter(combined_cellchat, idents.use = "apCAF")
+patchwork::wrap_plots(plots = list(gg1,gg2,gg3))
+
+
+
+#Part II: Identify the conserved and context-specific signaling pathways
+#functional
+combined_cellchat <- computeNetSimilarityPairwise(combined_cellchat, type = "functional")
+combined_cellchat <- netEmbedding(combined_cellchat, type = "functional", umap.method = "uwot")
+combined_cellchat <- netClustering(combined_cellchat, type = "functional")
+netVisual_embeddingPairwise(combined_cellchat, type = "functional", label.size = 3.5)
+
+#structural
+combined_cellchat <- computeNetSimilarityPairwise(combined_cellchat, type = "structural")
+combined_cellchat <- netEmbedding(combined_cellchat, type = "structural",umap.method = "uwot")
+combined_cellchat <- netClustering(combined_cellchat, type = "structural")
+netVisual_embeddingPairwise(combined_cellchat, type = "structural", label.size = 2)
+
+# Compute and visualize the pathway distance in the learned joint manifold
+rankSimilarity(combined_cellchat, type = "functional")
+
+#Identify and visualize the conserved and context-specific signaling pathways
+gg1 <- rankNet(combined_cellchat, mode = "comparison", stacked = T, do.stat = TRUE)
+gg2 <- rankNet(combined_cellchat, mode = "comparison", stacked = F, do.stat = TRUE)
+gg1 + gg2
+
+unique(combined_cellchat@idents$joint)
+
+#outgoing signal
+pathway.union <- union(object.list[[i]]@netP$pathways, object.list[[i+1]]@netP$pathways)
+ht1 = netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = "outgoing", signaling = pathway.union, title = names(object.list)[i], width = 5, height = 6)
+ht2 = netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern = "outgoing", signaling = pathway.union, title = names(object.list)[i+1], width = 5, height = 6)
+draw(ht1 + ht2, ht_gap = unit(0.5, "cm"))
+#incoming signal
+ht1 = netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = "incoming", signaling = pathway.union, title = names(object.list)[i], width = 5, height = 6, color.heatmap = "GnBu")
+ht2 = netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern = "incoming", signaling = pathway.union, title = names(object.list)[i+1], width = 5, height = 6, color.heatmap = "GnBu")
+draw(ht1 + ht2, ht_gap = unit(0.5, "cm"))
+#Overal
+ht1 = netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = "all", signaling = pathway.union, title = names(object.list)[i], width = 5, height = 6, color.heatmap = "OrRd")
+ht2 = netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern = "all", signaling = pathway.union, title = names(object.list)[i+1], width = 5, height = 6, color.heatmap = "OrRd")
+draw(ht1 + ht2, ht_gap = unit(0.5, "cm"))
+
+#Part III: Identify the upgulated and down-regulated signaling ligand-receptor pairs
+#Identify dysfunctional signaling by comparing the communication probabities
+netVisual_bubble(combined_cellchat, thresh=0.05, sources.use = 2, targets.use = c(1,3,5,6),  comparison = c(1,2), angle.x = 45)
+
+gg1 <- netVisual_bubble(combined_cellchat, sources.use = 5, targets.use = c(2,15,17,18,19,20,21,22,23),  comparison = c(1,2), max.dataset = 2, title.name = "Increased signaling in LS", angle.x = 45, remove.isolate = T)
+#> Comparing communications on a merged object
+gg2 <- netVisual_bubble(combined_cellchat, sources.use = 5, targets.use = c(2,15,17,18,19,20,21,22,23),  comparison = c(1,2), max.dataset = 1, title.name = "Decreased signaling in LS", angle.x = 45, remove.isolate = T)
+#> Comparing communications on a merged object
+gg1 + gg2
+
+
+
+#Identify dysfunctional signaling by using differential expression analysis
+pos.dataset = "TAK981"
+features.name = pos.dataset
+combined_cellchat <- identifyOverExpressedGenes(combined_cellchat, group.dataset = "datasets", pos.dataset = pos.dataset, features.name = features.name, only.pos = FALSE, thresh.pc = 0.1, thresh.fc = 0.1, thresh.p = 1)
+net <- netMappingDEG(combined_cellchat, features.name = features.name)
+net.up <- subsetCommunication(combined_cellchat, net = net, datasets = "TAK981",ligand.logFC = 0.2, receptor.logFC = NULL)
+net.down <- subsetCommunication(combined_cellchat, net = net, datasets = "control",ligand.logFC = -0.1, receptor.logFC = -0.1)
+gene.up <- extractGeneSubsetFromPair(net.up, combined_cellchat)
+gene.down <- extractGeneSubsetFromPair(net.down, combined_cellchat)
+
+pairLR.use.up = net.up[, "interaction_name", drop = F]
+gg1 <- netVisual_bubble(combined_cellchat, pairLR.use = pairLR.use.up, sources.use = 1, targets.use = c(15,16,17,18,19,20,21,22,23), comparison = c(1, 2), 
+                        angle.x = 90, remove.isolate = T,title.name = paste0("Up-regulated signaling in ", names(object.list)[2]))
+pairLR.use.down = net.down[, "interaction_name", drop = F]
+gg2 <- netVisual_bubble(combined_cellchat, pairLR.use = pairLR.use.down, sources.use = 1, targets.use = c(15,16,17,18,19,20,21,22,23), comparison = c(1, 2),
+                        angle.x = 90, remove.isolate = T,title.name = paste0("Down-regulated signaling in ", names(object.list)[2]))
+gg1 + gg2
+
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_chord_gene(object.list[[2]], sources.use = 1, targets.use = c(5), slot.name = 'net', net = net.up, 
+                     lab.cex = 0.8, small.gap = 3.5, title.name = paste0("Up-regulated signaling in ", names(object.list)[2]))
+netVisual_chord_gene(object.list[[1]], sources.use = 1, targets.use = c(5), slot.name = 'net', net = net.down, 
+                     lab.cex = 0.8, small.gap = 3.5, title.name = paste0("Down-regulated signaling in ", names(object.list)[2]))
+
+
+
+# Part IV: Visually compare cell-cell communication using Hierarchy plot, Circle plot or Chord diagram
+pathways.show <- c("CD80") 
+weight.max <- getMaxWeight(object.list, slot.name = c("netP"), attribute = pathways.show) # control the edge weights across different datasets
+par(mfrow = c(2,3), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_aggregate(object.list[[i]], signaling = pathways.show, layout = "circle", edge.weight.max = weight.max[1], edge.width.max = 10, signaling.name = paste(pathways.show, names(object.list)[i]))
+}
+
+pathways.show <- c("CD80") 
+par(mfrow = c(1,2), xpd=TRUE)
+ht <- list()
+for (i in 1:length(object.list)) {
+  ht[[i]] <- netVisual_heatmap(object.list[[i]], signaling = pathways.show, color.heatmap = "Reds",title.name = paste(pathways.show, "signaling ",names(object.list)[i]))
+}
+ComplexHeatmap::draw(ht[[1]] + ht[[2]], ht_gap = unit(0.5, "cm"))
+
+
+# Chord diagram
+pathways.show <- c("CD86") 
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_aggregate(object.list[[i]], signaling = pathways.show, layout = "chord", signaling.name = paste(pathways.show, names(object.list)[i]))
+}
+
+# NET Chord diagram
+group.cellType <- c(rep("FIB", 4), rep("DC", 4), rep("TC", 4)) # grouping cell clusters into fibroblast, DC and TC cells
+names(group.cellType) <- levels(object.list[[1]]@idents)
+pathways.show <- c("CXCL") 
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_chord_cell(object.list[[i]], signaling = pathways.show, group = group.cellType, title.name = paste0(pathways.show, " signaling network - ", names(object.list)[i]))
+}
+
+#Net chord diagram - gene
+par(mfrow = c(1, 2), xpd=TRUE)
+# compare all the interactions sending from Inflam.FIB to DC cells
+for (i in 1:length(object.list)) {
+  netVisual_chord_gene(object.list[[i]], sources.use = 1, targets.use = c(15:23), lab.cex = 0.5, title.name = paste0("Signaling from Inflam.FIB - ", names(object.list)[i]))
+}
+
+# compare all the interactions sending from fibroblast to inflamatory immune cells
+par(mfrow = c(1, 2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_chord_gene(object.list[[i]], sources.use = c(1,2, 3, 4), targets.use = c(8,10),  title.name = paste0("Signaling received by Inflam.DC and .TC - ", names(object.list)[i]), legend.pos.x = 10)
+}
+
+# show all the significant signaling pathways from fibroblast to immune cells
+par(mfrow = c(1, 2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_chord_gene(object.list[[i]], sources.use = c(1), targets.use = c(15:23),slot.name = "netP", title.name = paste0("Signaling pathways sending from fibroblast - ", names(object.list)[i]), legend.pos.x = 10)
+}

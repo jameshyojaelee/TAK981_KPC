@@ -18,8 +18,8 @@ library(infercnv)
 library(viridis)
 library(slingshot)
 library("scProportionTest")
-setwd("E:/TAK981_KPC/control_vs_TAK981")
-#load('nonimmune.RData')
+setwd("D:/TAK981_KPC/control_vs_TAK981")
+load('cellchat_new.RData')
 
 #InferCNV
 kpc_matrix <- GetAssayData(scKPC, slot="counts")
@@ -31,10 +31,11 @@ kpc_cnv <- CreateInfercnvObject(raw_counts_matrix=kpc_matrix,
                                 delim="\t",
                                 gene_order_file="vM28.annotation.txt",
                                 ref_group_names=c("Endothelial"))
-memory.limit(56000)
+# memory.limit(56000)
 kpc_cnv = infercnv::run(kpc_cnv,
                         cutoff=0.1,  # use 1 for smart-seq, 0.1 for 10x-genomics
                         out_dir="InferCNV",  # dir is auto-created for storing outputs
                         cluster_by_groups=T,   # cluster
                         denoise=T,
+                        num_threads = 64,
                         HMM=T)
